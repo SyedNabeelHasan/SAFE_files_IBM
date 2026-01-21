@@ -570,10 +570,6 @@ for t in range(1,total_time_steps,1):
             else:
                 pass
             
-    p_new = p_prime + p_old        #corrected pressure copy mesh     # p(n+1) = p' + p(n)
-    # p_stack.append(p_new)
-    p_old = p_new
-
     for i in range(0,len(ghost_nodes),1):
         for j in range(0,len(ghost_nodes[i]),1):
             x = ghost_nodes[i][j][0]
@@ -586,6 +582,11 @@ for t in range(1,total_time_steps,1):
                 v_copy[r][c] = drich_v[i]
             else:
                 pass
+
+    p_new = p_prime + p_old        #corrected pressure copy mesh     # p(n+1) = p' + p(n)
+    # p_stack.append(p_new)
+    p_old = p_new
+
 
     v_check = []
     for i in range(0,len(inside_pt),1):
