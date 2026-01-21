@@ -153,7 +153,7 @@ plt.ylabel("y")
 plt.show()
 #=======================================================================================================================================#
 
-total_time_steps = 50
+total_time_steps = 500
 del_t = 0.001
 
 del_h = 1.0/(nx-1)
@@ -452,13 +452,11 @@ for t in range(1,total_time_steps,1):
         B_np = np.array(B_sub, dtype=np.float64)
         ebt = time.time()
         # print("B_time::",ebt-sbt)
-    # A_np[0,:] = 0
-    # A_np[0][0] = 1
-    # B_np[0] = 0
-    # rank= np.linalg.matrix_rank(A_np)
-    # print("pp",rank,len(variable_array))
-    # print(A_np)
-    # time.sleep(900)
+    A_np[9702,:] = 0
+    A_np[9702][9702] = 1
+    A_np[9703][9702] = 0
+    A_np[9603][9702]= 0
+    B_np[9702] = 0
     st = time.time()
     #---------------------------------------------------------------------------------------------------------------#
     #                                                 Gauss-Seidel Method
