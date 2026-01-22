@@ -153,13 +153,15 @@ plt.ylabel("y")
 plt.show()
 #=======================================================================================================================================#
 
-total_time_steps = 500
+total_time_steps = 52000
 del_t = 0.001
 
 del_h = 1.0/(nx-1)
 
 Re = 100        # Set Reynolds number here
-etr = 5         # Set etr here (every time iteration)
+etr = 100         # Set etr here (every time iteration)
+RESTART = 1
+
 
 u_old = u_mat
 v_old = v_mat
@@ -176,7 +178,50 @@ v_p = v_mat.copy()           # v_velocity copy mesh
 u_copy = u_mat.copy()
 v_copy = v_mat.copy() 
 
-for t in range(1,total_time_steps,1):
+if (RESTART == 1):
+
+    start = 49800
+    # =====================================
+    # USER: Put file path here manually
+    # =====================================
+
+    file_path_u = r"D:/numerical computation/geometry meshing/Meshes/Time_stack_u/Time_stack_u_t049800.npz"
+    file_path_v = r"D:/numerical computation/geometry meshing/Meshes/Time_stack_v/Time_stack_v_t049800.npz"
+    file_path_p = r"D:/numerical computation/geometry meshing/Meshes/Time_stack_p/Time_stack_p_t049800.npz"
+
+    # =====================================
+    # Load NPZ file
+    # =====================================
+
+    data_u = np.load(file_path_u)
+    data_v = np.load(file_path_v)
+    data_p = np.load(file_path_p)
+
+    print("Available arrays:", data_u.files)
+    print("Available arrays:", data_v.files)
+    print("Available arrays:", data_p.files)
+
+    key_u = data_u.files[0]       # only one array expected
+    key_v = data_v.files[0]       # only one array expected
+    key_p = data_p.files[0]       # only one array expected
+
+    U = data_u[key_u]
+    V = data_v[key_v]
+    P = data_p[key_p]
+
+    u_old = U
+    v_old = V
+    p_old = P
+
+else:
+    start = 1
+    pass
+    
+
+#=======================================================================================================================================#
+#                                                           TIME LOOP BEGINS
+#=======================================================================================================================================#
+for t in range(start, total_time_steps, 1):
     
     print("=================================================================================================")
     print("itn = ",t,"/",total_time_steps)
@@ -267,7 +312,7 @@ for t in range(1,total_time_steps,1):
     # for moving and deforming bodies
     # inside_pt = time_based_inside_pt[t]     # here inside points which are going to be function of time are stored in time_based_inside_pt
     # ghost_node = time_based_ghost_node[t]   # here ghost points which are going to be function of time are stored in time_based_ghost_node
-    if(t == 1):
+    if(t == start):
         sat = time.time()
         # Building co-efficient matrix A here
         A = np.zeros((len(variable_array),len(variable_array)))
@@ -429,7 +474,7 @@ for t in range(1,total_time_steps,1):
         print("A matrix")
         print(A_np)
      
-    if(t > 1):
+    if(t > start):
         sbt = time.time()
         # print("?><:?>:",len(inside_pt))
         # print("?><:?>:",len(B_vector_sequence))
@@ -464,7 +509,7 @@ for t in range(1,total_time_steps,1):
     # print("Time taken for A & B matrix generation = ",ee-ss)
     # check for SDD
     
-    if (t==1):
+    if (t==start):
         # gauss siedel method
         s = np.tril(A_np)               # lower triangular matrix (contains the diagonal element)
         s_inv = np.linalg.inv(s)
@@ -587,8 +632,6 @@ for t in range(1,total_time_steps,1):
     # p_stack.append(p_new)
     p_old = p_new
 
-
-    v_check = []
     for i in range(0,len(inside_pt),1):
         ib,jb = cord_transfer_logic(i)
         #========================================For u convection term (Hu_conv)==================================
@@ -673,8 +716,8 @@ for t in range(1,total_time_steps,1):
     # updating u_old and v_old
     u_old = u_copy
     v_old = v_copy
-
-    if t % etr == 0:
+    print(etr)
+    if t % etr < 1e-3:
 
         base_dir = r"D:/numerical computation/geometry meshing/Meshes"
 
@@ -689,7 +732,9 @@ for t in range(1,total_time_steps,1):
         os.makedirs(v_dir, exist_ok=True)
         os.makedirs(p_dir, exist_ok=True)
 
+        print("@",t)
         tag = f"{t:06d}"   # zero padded timestep
+        print("@",tag)
 
         # ----------------------------
         # Force numeric arrays (important)
