@@ -153,14 +153,30 @@ def onkey(event):
 fig.canvas.mpl_connect('key_press_event', onkey)
 
 plt.show()
-print(line)
+#-------------------------------------------------------------------------Meshing begins-------------------------------------------------#
+print("Finding Xmax & Ymax...")
+# Filter only (x, y) points
+points = [p for p in line if isinstance(p, tuple)]
+
+# Extract x and y separately
+x_values = [p[0] for p in points]
+y_values = [p[1] for p in points]
+
+# Compute max values
+x_max = max(x_values)
+y_max = max(y_values)
+
+print("Xmax =", x_max)
+print("Ymax =", y_max)
+#-----------------------------------------------------------#
 
 # def find_repeated():
 
 # Calcuation of mid-boundary coordinates
 # Note: We must try to avoid giving geometries smaller than mesh element size
+# Example: We want a grid of 129x129 (includes boundaries) so we must input del_h = 10/(129-2) = 10/(127)
 
-del_h = 2
+del_h = 0.5             #0.0787              
 tol = 8
 tolerance = 1e-8
 space_laps = 1e-4    # (set your input precision)
@@ -328,8 +344,8 @@ plt.show()
 Points = []
 h = del_h 
 
-for x in np.arange(0,10+del_h,h):
-    for y in np.arange(0,10+del_h,h):
+for x in np.arange(0,x_max+del_h,h):
+    for y in np.arange(0,y_max+del_h,h):
         Points.append((x,y))
 print("🏃🏼‍♂️‍➡️: ",len(Points))
 # time.sleep(5)
@@ -341,7 +357,7 @@ points = [p for p in rounded_points_2 if p not in boundary_set]
 
 #------------------------------------ checking of odd-even intersections with respect to x------------------------------------------------#
 interior_points_x=[]
-for Y in np.arange(0,10,h):
+for Y in np.arange(0,y_max+del_h,h):
 
     edge_points_x = []     # Stores data relating to boundary coordinates at particular Y value
     test_point_x = []      # Stores test points from complete space that have same particular Y value
@@ -381,7 +397,7 @@ filtered_interior_x_set = set(filtered_interior_x)  # creating hash-maps for O(1
 filtered_exterior = list(set(points) - filtered_interior_x_set)  # All_the_points - interior_points = pureExteriorPoints + boundaryPoints
 
 fill = []
-for Y in np.arange(0,10,del_h):
+for Y in np.arange(0,y_max+del_h,del_h):
     for u in range(0,len(unique_rounded_points),1):
         if (abs(unique_rounded_points[u][1] - Y) < tolerance):
             fill.append(unique_rounded_points[u])
@@ -397,15 +413,31 @@ edge_st = time.time()
 
 ghost_nodes = []
 first_interface = []
+
+target = (7,2.5)
+target = np.array(target)
+
+matches = np.where((filtered_interior_x == target).all(axis=1))[0]
+
+if len(matches) == 0:
+    print("Target not found:", target)
+else:
+    idx = matches[0]
+    print("Target index:", idx)
+
 A = torch.tensor(filtered_interior_x, dtype=torch.float64, device=device)   # shape (N, 2)
 B = torch.tensor(filtered_exterior_x, dtype=torch.float64, device=device)   # shape (M, 2)
-
+print(filtered_interior_x[113],"<<")
 for i in range(len(A)):
     A0 = A[i]                          # shape (2,)
     diff = B - A0                      # (M, 2)
     dist = torch.sqrt((diff[:,0])**2 + (diff[:,1])**2)   # GPU
-    mask = (torch.abs(dist - del_h) < 1e-30)              # GPU
+    mask = (torch.abs(dist - del_h) < 1e-10)              # GPU
+    if (A0[0] == 7.0 and A0[1]==2.5):
+        print(i,dist,mask)
     idx = torch.where(mask == True)[0]                   # GPU
+    if (A0[0] == 7.0 and A0[1]==2.5):
+        print(idx)
     id = idx.cpu().numpy()
     if len(id) > 0:
         for j in range(0,len(id),1):
@@ -443,9 +475,10 @@ if (len(line)!=0):
                 dist_OF = np.sqrt((X0-X2)**2 + (Y0-Y2)**2)  # length OF
                 # print("f: ",X0,Y0,"",per_dist,"",sin_alpha,"",sin_beta)
                 # print("f: ",X0,Y0,"",per_dist,"",rounded_sin_alpha,"",rounded_sin_beta)
-                if (((rounded_sin_alpha < del_h) or (rounded_sin_beta < del_h)) and ((dist_OE <= dist_EF) and (dist_OF <= dist_EF))):
-                    sub_sorted_ghost_node.append((X0,Y0))
-               
+                # if (((rounded_sin_alpha < del_h) or (rounded_sin_beta < del_h)) and ((dist_OE <= dist_EF) and (dist_OF <= dist_EF))):
+                #     sub_sorted_ghost_node.append((X0,Y0))
+                if (((per_dist < np.sqrt(2*del_h**2))) and ((dist_OE <= dist_EF) and (dist_OF <= dist_EF))):
+                    sub_sorted_ghost_node.append((X0,Y0))               
                 else:
                     pass
             if(len(sub_sorted_ghost_node) > 0):
@@ -480,8 +513,7 @@ if(len(circle)!=0):
                 sy = abs(s/sin_beta)
                 rounded_sx = round(sx,tol)
                 rounded_sy = round(sy,tol)
-                
-                
+                        
                 print("o: ",x0,y0,"",dist_OE,"",s,"",sx,sy)
                 if ( (rounded_sx < del_h) or (rounded_sy < del_h)):
                     sub_sorted_ghost_node.append((x0,y0))
@@ -493,22 +525,26 @@ if(len(circle)!=0):
                 pass    
         else:
             pass
-
+# print("MNJ",first_interface,len(first_interface))
 # After analyzing and sorting out the ghost nodes...now we must get the corresponding first interfaces
 sorted_first_interface = []
 for i in range(0,len(sorted_ghost_nodes),1):
     sub_sorted_first_interface = []
     for j in range(0,len(sorted_ghost_nodes[i]),1):
         X0,Y0 = sorted_ghost_nodes[i][j][0],sorted_ghost_nodes[i][j][1]
+        # print(X0,Y0)
         for k in range(0,len(first_interface),1):
             Xf,Yf = first_interface[k][0],first_interface[k][1]
+            # if(Xf==7 and Yf==2.5):
+            # print(k,Xf,Yf)
             f_dist_g = np.sqrt((X0 - Xf)**2 + (Y0 - Yf)**2)
             if (abs(f_dist_g - del_h ) < tolerance):
                 sub_sorted_first_interface.append((Xf,Yf))
-                break       # this "break" is important as it limits the finding to only one of the first interface w.r.t the ghost node
+                # break       # this "break" is important as it limits the finding to only one of the first interface w.r.t the ghost node
 
             else:
                 pass
+        # time.sleep(900)
     
     sorted_first_interface.append(sub_sorted_first_interface)
 
@@ -543,130 +579,130 @@ if (len(line) !=0 ):
         mirror.append(mirror_sub)
 
 
-interpolation_points = []
-# detecting points for bilinear interpolation on mirror point
-for i in range(0,len(sorted_ghost_nodes),1):
-    X0,Y0 = line[i][0],line[i][1]
-    X1,Y1 = line[i+1][0],line[i+1][1]
-    print("#main")
-    if ((X1 != "B" or Y1 !="R") and (X2 != "B" or Y2 !="R") ):
-        if (abs(X1 - X0) < tolerance):
-            pass
-        elif(abs(Y1 - Y0) < tolerance):
-            slope = 0
-        else:
-            slope = (Y1-Y0)/(X1-X0)
-        print("sub_main")
-        sub_interpolation_points = []
-        for j in range(0,len(sorted_ghost_nodes[i]),1):
-            coords = []
-            Xg,Yg = sorted_ghost_nodes[i][j][0],sorted_ghost_nodes[i][j][1]
-            Xm,Ym = mirror[i][j][0],mirror[i][j][1]
-            if (abs(X1 - X0) < tolerance):  # vertical lines
-                x = X0
-                y = Yg
-            elif(abs(Y1 - Y0) < tolerance): # horizontal lines
-                x = Xg
-                y = Y0
-            else:                           # lines at angles != 90° and 180° 
-                x = ((Yg - Y0)/slope) + X0
-                y = Y0 + (slope*(Xg - X0))
+# interpolation_points = []
+# # detecting points for bilinear interpolation on mirror point
+# for i in range(0,len(sorted_ghost_nodes),1):
+#     X0,Y0 = line[i][0],line[i][1]
+#     X1,Y1 = line[i+1][0],line[i+1][1]
+#     print("#main")
+#     if ((X1 != "B" or Y1 !="R") and (X2 != "B" or Y2 !="R") ):
+#         if (abs(X1 - X0) < tolerance):
+#             pass
+#         elif(abs(Y1 - Y0) < tolerance):
+#             slope = 0
+#         else:
+#             slope = (Y1-Y0)/(X1-X0)
+#         print("sub_main")
+#         sub_interpolation_points = []
+#         for j in range(0,len(sorted_ghost_nodes[i]),1):
+#             coords = []
+#             Xg,Yg = sorted_ghost_nodes[i][j][0],sorted_ghost_nodes[i][j][1]
+#             Xm,Ym = mirror[i][j][0],mirror[i][j][1]
+#             if (abs(X1 - X0) < tolerance):  # vertical lines
+#                 x = X0
+#                 y = Yg
+#             elif(abs(Y1 - Y0) < tolerance): # horizontal lines
+#                 x = Xg
+#                 y = Y0
+#             else:                           # lines at angles != 90° and 180° 
+#                 x = ((Yg - Y0)/slope) + X0
+#                 y = Y0 + (slope*(Xg - X0))
 
-            xp = x - Xg
-            xp = round(xp,tol)
-            yp = y - Yg
-            yp = round(yp, tol)
-            print("#-map-#",xp,yp)
-            if (xp > 0):
-                print("#1")
-                alpha_x_1 = Xg + del_h
-                alpha_x_2 = Xg + 2*del_h
-                alpha_x_3 = Xg + 3*del_h
-                alpha_x_1 = round(alpha_x_1,tol)
-                alpha_x_2 = round(alpha_x_2,tol)
-                alpha_x_3 = round(alpha_x_3,tol)
-                # alpha_y_1 = Yg + del_h
-                # alpha_y_2 = Yg + 2*del_h
-                # alpha_y_3 = Yg + 3*del_h
-                rt = time.time()
-                if ((alpha_x_1, Yg) in filtered_interior_x_set): 
-                    coords.append((alpha_x_1,Yg))
-                if ((alpha_x_2, Yg) in filtered_interior_x_set):
-                    coords.append((alpha_x_2,Yg))
-                if((alpha_x_3, Yg) in filtered_interior_x_set):
-                    coords.append((alpha_x_3,Yg))
-                et = time.time()
-                print("<",et-rt,">")
+#             xp = x - Xg
+#             xp = round(xp,tol)
+#             yp = y - Yg
+#             yp = round(yp, tol)
+#             print("#-map-#",xp,yp)
+#             if (xp > 0):
+#                 print("#1")
+#                 alpha_x_1 = Xg + del_h
+#                 alpha_x_2 = Xg + 2*del_h
+#                 alpha_x_3 = Xg + 3*del_h
+#                 alpha_x_1 = round(alpha_x_1,tol)
+#                 alpha_x_2 = round(alpha_x_2,tol)
+#                 alpha_x_3 = round(alpha_x_3,tol)
+#                 # alpha_y_1 = Yg + del_h
+#                 # alpha_y_2 = Yg + 2*del_h
+#                 # alpha_y_3 = Yg + 3*del_h
+#                 rt = time.time()
+#                 if ((alpha_x_1, Yg) in filtered_interior_x_set): 
+#                     coords.append((alpha_x_1,Yg))
+#                 if ((alpha_x_2, Yg) in filtered_interior_x_set):
+#                     coords.append((alpha_x_2,Yg))
+#                 if((alpha_x_3, Yg) in filtered_interior_x_set):
+#                     coords.append((alpha_x_3,Yg))
+#                 et = time.time()
+#                 print("<",et-rt,">")
                 
-            if (xp < 0):
-                print("#2")
-                alpha_x_1 = Xg - del_h
-                alpha_x_2 = Xg - 2*del_h
-                alpha_x_3 = Xg - 3*del_h  
-                # alpha_y_1 = Yg - del_h
-                # alpha_y_2 = Yg - 2*del_h
-                # alpha_y_3 = Yg - 3*del_h 
-                alpha_x_1 = round(alpha_x_1,tol)
-                alpha_x_2 = round(alpha_x_2,tol)
-                alpha_x_3 = round(alpha_x_3,tol)
-                rt = time.time()
-                if ((alpha_x_1, Yg) in filtered_interior_x_set):    
-                    coords.append((alpha_x_1,Yg))
-                if((alpha_x_2, Yg) in filtered_interior_x_set):
-                    coords.append((alpha_x_2,Yg))
-                if((alpha_x_3, Yg) in filtered_interior_x_set):
-                    coords.append((alpha_x_3,Yg))
-                et = time.time()
-                print("<",et-rt,">")                     
-            if (yp > 0):
-                print("#3")
-                # alpha_x_1 = Xg - del_h
-                # alpha_x_2 = Xg - 2*del_h
-                # alpha_x_3 = Xg - 3*del_h  
-                alpha_y_1 = Yg + del_h
-                alpha_y_2 = Yg + 2*del_h
-                alpha_y_3 = Yg + 3*del_h 
-                alpha_y_1 = round(alpha_y_1,tol)
-                alpha_y_2 = round(alpha_y_2,tol)
-                alpha_y_3 = round(alpha_y_3,tol)
-                rt = time.time() 
-                if ((Xg, alpha_y_1) in filtered_interior_x_set):  
-                    coords.append((Xg,alpha_y_1))
-                if ((Xg, alpha_y_2) in filtered_interior_x_set):
-                    coords.append((Xg,alpha_y_2))
-                if((Xg, alpha_y_3) in filtered_interior_x_set):
-                    coords.append((Xg,alpha_y_3))
-                et = time.time() 
-                print("<",et-rt,">")
+#             if (xp < 0):
+#                 print("#2")
+#                 alpha_x_1 = Xg - del_h
+#                 alpha_x_2 = Xg - 2*del_h
+#                 alpha_x_3 = Xg - 3*del_h  
+#                 # alpha_y_1 = Yg - del_h
+#                 # alpha_y_2 = Yg - 2*del_h
+#                 # alpha_y_3 = Yg - 3*del_h 
+#                 alpha_x_1 = round(alpha_x_1,tol)
+#                 alpha_x_2 = round(alpha_x_2,tol)
+#                 alpha_x_3 = round(alpha_x_3,tol)
+#                 rt = time.time()
+#                 if ((alpha_x_1, Yg) in filtered_interior_x_set):    
+#                     coords.append((alpha_x_1,Yg))
+#                 if((alpha_x_2, Yg) in filtered_interior_x_set):
+#                     coords.append((alpha_x_2,Yg))
+#                 if((alpha_x_3, Yg) in filtered_interior_x_set):
+#                     coords.append((alpha_x_3,Yg))
+#                 et = time.time()
+#                 print("<",et-rt,">")                     
+#             if (yp > 0):
+#                 print("#3")
+#                 # alpha_x_1 = Xg - del_h
+#                 # alpha_x_2 = Xg - 2*del_h
+#                 # alpha_x_3 = Xg - 3*del_h  
+#                 alpha_y_1 = Yg + del_h
+#                 alpha_y_2 = Yg + 2*del_h
+#                 alpha_y_3 = Yg + 3*del_h 
+#                 alpha_y_1 = round(alpha_y_1,tol)
+#                 alpha_y_2 = round(alpha_y_2,tol)
+#                 alpha_y_3 = round(alpha_y_3,tol)
+#                 rt = time.time() 
+#                 if ((Xg, alpha_y_1) in filtered_interior_x_set):  
+#                     coords.append((Xg,alpha_y_1))
+#                 if ((Xg, alpha_y_2) in filtered_interior_x_set):
+#                     coords.append((Xg,alpha_y_2))
+#                 if((Xg, alpha_y_3) in filtered_interior_x_set):
+#                     coords.append((Xg,alpha_y_3))
+#                 et = time.time() 
+#                 print("<",et-rt,">")
                 
-            if (yp < 0):
-                print("#4")
-                # alpha_x_1 = Xg + del_h
-                # alpha_x_2 = Xg + 2*del_h
-                # alpha_x_3 = Xg + 3*del_h  
-                alpha_y_1 = Yg - del_h
-                alpha_y_2 = Yg - 2*del_h
-                alpha_y_3 = Yg - 3*del_h 
-                alpha_y_1 = round(alpha_y_1,tol)
-                alpha_y_2 = round(alpha_y_2,tol)
-                alpha_y_3 = round(alpha_y_3,tol)
-                rt = time.time() 
-                if ((Xg, alpha_y_1) in filtered_interior_x_set):  
-                    coords.append((Xg,alpha_y_1))
-                if((Xg, alpha_y_2) in filtered_interior_x_set):
-                    coords.append((Xg,alpha_y_2))
-                if((Xg, alpha_y_3) in filtered_interior_x_set):
-                    coords.append((Xg,alpha_y_3))
-                et = time.time()
-                print("<",et-rt,">")
-            if ((abs(Xg-Xm) < tolerance) and (abs(Yg-Ym) < tolerance)):
-                coords.append((Xg,Yg))
-            else:
-                pass
-            sub_interpolation_points.append(coords)
-        interpolation_points.append(sub_interpolation_points)   
-    else:
-        pass
+#             if (yp < 0):
+#                 print("#4")
+#                 # alpha_x_1 = Xg + del_h
+#                 # alpha_x_2 = Xg + 2*del_h
+#                 # alpha_x_3 = Xg + 3*del_h  
+#                 alpha_y_1 = Yg - del_h
+#                 alpha_y_2 = Yg - 2*del_h
+#                 alpha_y_3 = Yg - 3*del_h 
+#                 alpha_y_1 = round(alpha_y_1,tol)
+#                 alpha_y_2 = round(alpha_y_2,tol)
+#                 alpha_y_3 = round(alpha_y_3,tol)
+#                 rt = time.time() 
+#                 if ((Xg, alpha_y_1) in filtered_interior_x_set):  
+#                     coords.append((Xg,alpha_y_1))
+#                 if((Xg, alpha_y_2) in filtered_interior_x_set):
+#                     coords.append((Xg,alpha_y_2))
+#                 if((Xg, alpha_y_3) in filtered_interior_x_set):
+#                     coords.append((Xg,alpha_y_3))
+#                 et = time.time()
+#                 print("<",et-rt,">")
+#             if ((abs(Xg-Xm) < tolerance) and (abs(Yg-Ym) < tolerance)):
+#                 coords.append((Xg,Yg))
+#             else:
+#                 pass
+#             sub_interpolation_points.append(coords)
+#         interpolation_points.append(sub_interpolation_points)   
+#     else:
+#         pass
 
 # print(interpolation_points[0][7])
 
@@ -683,9 +719,15 @@ print(Fore.BLUE + "Final mesh !!!" + Style.RESET_ALL)
 print(f"total nodes: {len(filtered_interior_x)}")
 print("")
 
-#print(sorted_ghost_nodes[0])
+print(sorted_ghost_nodes[0])
+print(first_interface)
 
 # print(filtered_interior_x)
+
+# sorted_first_interface[0][0] = 20,2.1
+# sorted_first_interface[0][200] = 20,2.1
+# print(sorted_first_interface[0],len(sorted_first_interface[0]))
+
 
 # Unzip coordinates for plotting
 x, y = zip(*unique_rounded_points)
@@ -700,6 +742,7 @@ vvc = sorted_first_interface[0]
 dxc,vfc = zip(*vvc)
 miros = mirror[0]
 mxi,myi = zip(*miros)
+xe,ye = zip(*filtered_exterior_x)
 
 # xg = sorted_ghost_nodes[0][7][0]
 # yg = sorted_ghost_nodes[0][7][1]
@@ -721,10 +764,10 @@ plt.scatter(a, b, color = "black", s = 5)       # x-marker
 
 plt.scatter(yama,lama,color = 'green', s = 10)
 plt.scatter(eera,meera,color = 'blue', s = 10)
-plt.scatter(dxc,vfc, color = "#000000", s = 5)
+plt.scatter(dxc,vfc, color = "#E0E700", s = 5)
 # plt.scatter(mxi,myi,color = "#823A3A",s = 6)
 
-# plt.scatter(xg,yg, s =7, color = 'blue')
+# plt.scatter(xe,ye, s =7, color = 'blue')
 # plt.scatter(xf,yf, s =7, color =  "#AF5858")
 # plt.scatter(xipn,yipn, s =7, color = "#9200A5")
 
@@ -736,8 +779,14 @@ plt.ylabel("Y-axis")
 # plt.grid(True, linestyle='--', alpha=0.7)
 # plt.legend()
 plt.axis('equal')  # Fix aspect ratio
-
 plt.show()
+
+
+
+nx = int((x_max+del_h)/del_h) + 1
+ny = int((y_max+del_h)/del_h) + 1
+
+print("nx, ny = ",nx,ny)
 
 path1 = r"D:/numerical computation/geometry meshing/Meshes/RAX_1"
 path2 = r"D:/numerical computation/geometry meshing/Meshes/GAX_1"
@@ -750,24 +799,25 @@ path2 = r"D:/numerical computation/geometry meshing/Meshes/GAX_1"
 # === Convert to numpy object arrays (important!) ===
 sorted_ghost_nodes = np.array(sorted_ghost_nodes, dtype=object)
 sorted_first_interface = np.array(sorted_first_interface, dtype=object)
-interpolation_points = np.array(interpolation_points, dtype=object)
+# interpolation_points = np.array(interpolation_points, dtype=object)
 mirror_array = np.array(mirror, dtype=object)
 
 # === Save paths ===
 path1 = r"D:/numerical computation/geometry meshing/Meshes/RAX_1.npz"
 path2 = r"D:/numerical computation/geometry meshing/Meshes/GAX_1.npz"
 
-# === Save .npz files ===
-np.savez(path1, array1=filtered_interior_x)
-np.savez(
-    path2,
-    array1=sorted_ghost_nodes,
-    array2=sorted_first_interface,
-    array3=interpolation_points,
-    array4=mirror_array,
-    array5=unique_rounded_points,
-    array6=rounded_horizontal,
-    array7=sorted_first_interface
-)
+# # === Save .npz files ===
+# np.savez(path1, array1=filtered_interior_x, del_h = del_h, nx = nx, ny = ny)
+# np.savez(
+#     path2,
+#     array1=sorted_ghost_nodes,
+#     array2=sorted_first_interface,
+#     # array3=interpolation_points,
+#     array4=mirror_array,
+#     array5=unique_rounded_points,
+#     array6=rounded_horizontal,
+#     array7=sorted_first_interface
+# )
 
 print("✅ Geometry data saved successfully!")
+# print(sorted_ghost_nodes)
