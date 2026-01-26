@@ -7,8 +7,11 @@ import psutil
 from scipy.sparse.linalg import cg
 from tqdm import tqdm
 import torch
-
+import scipy.sparse as sp
 import os
+import cupyx.scipy.sparse as gpu_sp
+import cupy as cp
+import cupyx.scipy.sparse.linalg as spla
 
 output_dir = r"D:/numerical computation/Results/FAH4001"
 
@@ -40,7 +43,7 @@ ghost_nodes_list = ghost_nodes_list = [list(map(tuple, block)) for block in ghos
 del_h = float(mesh_data["del_h"])                # ⬅️ set mesh element size here
 conversion_factor = 1/del_h     # mesh size
 # conversion_factor = 
-print("ooooo:::",inside_pt[0][0],inside_pt[0][1])
+print("grid size ",inside_pt[0][0],inside_pt[0][1])
 print(conversion_factor)
 
 def cord_transfer_logic(a):
@@ -104,11 +107,20 @@ for i in range(0,len(ghost_nodes),1):
         p_mat[r][c] = drich_p[i]
 
 #=======================================================================================================================================#
+# BCs for some example problems
+# drich_u = [0,0,0,"NDN",0,1]                                 # u velocity drichilit boundary condition
+# drich_v = [0,0,0,"NDN",0,0]                                 # v velocity drichilit boundary condition
+# drich_p = ["NDN","NDN","NDN",0,"NDN","NDN"]                 # p pressure drichilit boundary condition
+
+   
+# Ne_BC_u = ["NCN","NCN","NCN",0,"NCN","NCN"]                 # u velocity drichilit boundary condition
+# Ne_BC_v = ["NCN","NCN","NCN",0,"NCN","NCN"]                 # v velocity drichilit boundary condition
+# Ne_BC_p = [0,0,0,"NCN",0,0]                                 # p velocity drichilit boundary condition
 
 
 #=======================================================================================================================================#
 #                                                        SETTING UP BOUNDARY CONDITIONS
-#=======================================================================================================================================#
+# #=======================================================================================================================================#
 drich_u = [0,0,1,0]                                 # u velocity drichilit boundary condition
 drich_v = [0,0,0,0]                                 # v velocity drichilit boundary condition
 drich_p = ["NDN","NDN","NDN","NDN"]                 # p pressure drichilit boundary condition
@@ -152,20 +164,64 @@ plt.xlabel("x")
 plt.ylabel("y")
 plt.show()
 #=======================================================================================================================================#
+# target = (0.0787,9.9949)
+# import numpy as np
+# target = (7.5,2.0)
+# target = np.array(target)
 
-total_time_steps = 52000
-del_t = 0.001
+# matches = np.where((inside_pt == target).all(axis=1))[0]
+
+# if len(matches) == 0:
+#     print("Target not found:", target)
+# else:
+#     idx = matches[0]
+#     print("Target index:", idx)
+
+# target = (0.0787,9.9162)
+# import numpy as np
+
+# target = np.array(target)
+
+# matches = np.where((inside_pt == target).all(axis=1))[0]
+
+# if len(matches) == 0:
+#     print("Target not found:", target)
+# else:
+#     idx = matches[0]
+#     print("Target index:", idx)
+
+# target = (0.1574,9.9949)
+# import numpy as np
+
+# target = np.array(target)
+
+# matches = np.where((inside_pt == target).all(axis=1))[0]
+
+# if len(matches) == 0:
+#     print("Target not found:", target)
+# else:
+#     idx = matches[0]
+#     print("Target index:", idx)
+
+# time.sleep(900)
+
+total_time_steps = 500000
+del_t = 0.0001
 
 del_h = 1.0/(nx-1)
+print("△h = ",del_h)
 
 Re = 100        # Set Reynolds number here
-etr = 100         # Set etr here (every time iteration)
-RESTART = 1
+etr = 100        # Set etr here (every time iteration)
+RESTART = 1     # 1 (restart) 0 (no restart)
 
 
 u_old = u_mat
 v_old = v_mat
 p_old = p_mat
+
+# del_h = 0.00787
+# time.sleep(800)
 
 sst_main = time.time()
 #--------------------------------------------------------------------------------------------------------#
@@ -180,14 +236,14 @@ v_copy = v_mat.copy()
 
 if (RESTART == 1):
 
-    start = 49800
+    start = 163800
     # =====================================
     # USER: Put file path here manually
     # =====================================
 
-    file_path_u = r"D:/numerical computation/geometry meshing/Meshes/Time_stack_u/Time_stack_u_t049800.npz"
-    file_path_v = r"D:/numerical computation/geometry meshing/Meshes/Time_stack_v/Time_stack_v_t049800.npz"
-    file_path_p = r"D:/numerical computation/geometry meshing/Meshes/Time_stack_p/Time_stack_p_t049800.npz"
+    file_path_u = r"D:/numerical computation/geometry meshing/Meshes/Time_stack_u/Time_stack_u_t163800.npz"
+    file_path_v = r"D:/numerical computation/geometry meshing/Meshes/Time_stack_v/Time_stack_v_t163800.npz"
+    file_path_p = r"D:/numerical computation/geometry meshing/Meshes/Time_stack_p/Time_stack_p_t163800.npz"
 
     # =====================================
     # Load NPZ file
@@ -217,7 +273,9 @@ else:
     start = 1
     pass
     
-
+print(inside_pt)
+print(variable_array)
+# time.sleep(700)
 #=======================================================================================================================================#
 #                                                           TIME LOOP BEGINS
 #=======================================================================================================================================#
@@ -465,7 +523,7 @@ for t in range(start, total_time_steps, 1):
         
 
         B_np = np.array(B, dtype=np.float64)
-        A_np = np.array(A, dtype=np.int64)
+        A_np = np.array(A, dtype=np.float32)
         eat = time.time()
         print("A_time: ",eat-sat)
       
@@ -473,7 +531,28 @@ for t in range(start, total_time_steps, 1):
         print("--------pop-------")
         print("A matrix")
         print(A_np)
-     
+        # A_np[75][75] = -3
+        # A_np[113][113] = -3 
+        # A_np[16002,:] = 0
+        # A_np[16002][16002] = 1
+        # A_np[16003][16002] = 0
+        # A_np[15875][16002]= 0
+        # B_np[16002] = 0
+        # time.sleep(200)
+
+        # print("1-Dense matrix GB   :", A_np.nbytes / 1e9)
+        # A_csr_cpu = sp.csr_matrix(A_np)
+        # data_bytes    = A_csr_cpu.data.nbytes
+        # indices_bytes = A_csr_cpu.indices.nbytes
+        # indptr_bytes  = A_csr_cpu.indptr.nbytes
+
+        # total_bytes = data_bytes + indices_bytes + indptr_bytes
+        # print("CSR TOTAL MB     :", total_bytes / 1e6)
+        # # del A_np
+        # # print("2-Dense matrix GB   :", A_np.nbytes / 1e9)
+        # A_csr_gpu = gpu_sp.csr_matrix(A_csr_cpu)
+        # B_gpu = cp.asarray(B_np)
+
     if(t > start):
         sbt = time.time()
         # print("?><:?>:",len(inside_pt))
@@ -495,13 +574,12 @@ for t in range(start, total_time_steps, 1):
             b_sum = const + np.sum(b)
             B_sub.append(b_sum)
         B_np = np.array(B_sub, dtype=np.float64)
+        B_gpu = cp.asarray(B_np)        # move B_np to GPU
+
         ebt = time.time()
         # print("B_time::",ebt-sbt)
-    A_np[9702,:] = 0
-    A_np[9702][9702] = 1
-    A_np[9703][9702] = 0
-    A_np[9603][9702]= 0
-    B_np[9702] = 0
+    # B_np[9702] = 0
+    
     st = time.time()
     #---------------------------------------------------------------------------------------------------------------#
     #                                                 Gauss-Seidel Method
@@ -515,6 +593,7 @@ for t in range(start, total_time_steps, 1):
         s_inv = np.linalg.inv(s)
         D = np.diag(np.diag(A_np))
         T = np.triu(A_np)-D             # STRICTLY upper triangular matrix (contains only element above the diagonal)
+        # del A_np
 
         # ============================================================
         # MOVE TO GPU (only once!)
@@ -581,9 +660,12 @@ for t in range(start, total_time_steps, 1):
     #--------------------------------------------------------------------------------------------------------------------------------#
     #                                                       END
     #--------------------------------------------------------------------------------------------------------------------------------#
-    # solution_vector, info = cg(A_np, B_np, rtol = 1e-3, maxiter = 500)   # Conjugate gradient
+    # solution_vector, info = spla.cg(A_csr_gpu, B_gpu, tol = 1e-3, maxiter = 500)   # Conjugate gradient
     print(Fore.YELLOW + "Final-Solution" + Style.RESET_ALL)
     print(solution_vector)
+    # print(solution_vector[75])
+    # print(A_np[113])
+    # time.sleep(800)
         
     p_prime = p_mat.copy()                   
     for i in range(0,len(solution_vector),1):
@@ -781,7 +863,7 @@ fig, ax = plt.subplots(figsize=(8,6))
 contour = ax.contourf(X, Y, Z, 20, cmap='coolwarm')   # u velocity plot
 # contour = ax.contour(X, Y, Z, 20, colors='black', linewidths=0.8)
 plt.colorbar(contour, ax=ax, label='u Velocity')
-ax.streamplot(X, Y, u_old, v_old, color= 'k', density = 3, linewidth=1)
+ax.streamplot(X, Y, u_old, v_old, color= 'k', density = 1.5, linewidth=1)
 plt.title("Lid Driven Cavity: Velocity Streamlines")
 plt.xlabel("x")
 plt.ylabel("y")
