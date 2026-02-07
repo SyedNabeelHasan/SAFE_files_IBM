@@ -176,7 +176,7 @@ print("Ymax =", y_max)
 # Note: We must try to avoid giving geometries smaller than mesh element size
 # Example: We want a grid of 129x129 (includes boundaries) so we must input del_h = 10/(129-2) = 10/(127)
 
-del_h = 0.5             #0.0787              
+del_h = 0.126             #0.0787              
 tol = 8
 tolerance = 1e-8
 space_laps = 1e-4    # (set your input precision)
@@ -414,30 +414,19 @@ edge_st = time.time()
 ghost_nodes = []
 first_interface = []
 
-target = (7,2.5)
-target = np.array(target)
-
-matches = np.where((filtered_interior_x == target).all(axis=1))[0]
-
-if len(matches) == 0:
-    print("Target not found:", target)
-else:
-    idx = matches[0]
-    print("Target index:", idx)
-
 A = torch.tensor(filtered_interior_x, dtype=torch.float64, device=device)   # shape (N, 2)
 B = torch.tensor(filtered_exterior_x, dtype=torch.float64, device=device)   # shape (M, 2)
-print(filtered_interior_x[113],"<<")
+# print(filtered_interior_x[113],"<<")
 for i in range(len(A)):
     A0 = A[i]                          # shape (2,)
     diff = B - A0                      # (M, 2)
     dist = torch.sqrt((diff[:,0])**2 + (diff[:,1])**2)   # GPU
     mask = (torch.abs(dist - del_h) < 1e-10)              # GPU
-    if (A0[0] == 7.0 and A0[1]==2.5):
-        print(i,dist,mask)
+    # if (A0[0] == 7.0 and A0[1]==2.5):
+    #     print(i,dist,mask)
     idx = torch.where(mask == True)[0]                   # GPU
-    if (A0[0] == 7.0 and A0[1]==2.5):
-        print(idx)
+    # if (A0[0] == 7.0 and A0[1]==2.5):
+    #     print(idx)
     id = idx.cpu().numpy()
     if len(id) > 0:
         for j in range(0,len(id),1):
@@ -540,7 +529,7 @@ for i in range(0,len(sorted_ghost_nodes),1):
             f_dist_g = np.sqrt((X0 - Xf)**2 + (Y0 - Yf)**2)
             if (abs(f_dist_g - del_h ) < tolerance):
                 sub_sorted_first_interface.append((Xf,Yf))
-                # break       # this "break" is important as it limits the finding to only one of the first interface w.r.t the ghost node
+                break       # this "break" is important as it limits the finding to only one of the first interface w.r.t the ghost node
 
             else:
                 pass
@@ -706,6 +695,9 @@ if (len(line) !=0 ):
 
 # print(interpolation_points[0][7])
 
+# Building second_interface
+second_interface = set(filtered_interior_x) - set(first_interface)
+
     
 edge_et = time.time()
 edge_time = edge_et - edge_st
@@ -750,7 +742,7 @@ xe,ye = zip(*filtered_exterior_x)
 # yf = mirror[0][7][1]
 # ip_points = interpolation_points[0][7]
 # xipn,yipn = zip(*ip_points)
-
+ioj,lop = zip(*second_interface)
 
 
 # Plotting
@@ -765,6 +757,7 @@ plt.scatter(a, b, color = "black", s = 5)       # x-marker
 plt.scatter(yama,lama,color = 'green', s = 10)
 plt.scatter(eera,meera,color = 'blue', s = 10)
 plt.scatter(dxc,vfc, color = "#E0E700", s = 5)
+plt.scatter(ioj,lop, color = "#BE0095", s =5)
 # plt.scatter(mxi,myi,color = "#823A3A",s = 6)
 
 # plt.scatter(xe,ye, s =7, color = 'blue')
@@ -780,7 +773,6 @@ plt.ylabel("Y-axis")
 # plt.legend()
 plt.axis('equal')  # Fix aspect ratio
 plt.show()
-
 
 
 nx = int((x_max+del_h)/del_h) + 1
@@ -801,23 +793,26 @@ sorted_ghost_nodes = np.array(sorted_ghost_nodes, dtype=object)
 sorted_first_interface = np.array(sorted_first_interface, dtype=object)
 # interpolation_points = np.array(interpolation_points, dtype=object)
 mirror_array = np.array(mirror, dtype=object)
+second_interface = np.array(second_interface, dtype=object)
 
 # === Save paths ===
 path1 = r"D:/numerical computation/geometry meshing/Meshes/RAX_1.npz"
 path2 = r"D:/numerical computation/geometry meshing/Meshes/GAX_1.npz"
 
-# # === Save .npz files ===
-# np.savez(path1, array1=filtered_interior_x, del_h = del_h, nx = nx, ny = ny)
-# np.savez(
-#     path2,
-#     array1=sorted_ghost_nodes,
-#     array2=sorted_first_interface,
-#     # array3=interpolation_points,
-#     array4=mirror_array,
-#     array5=unique_rounded_points,
-#     array6=rounded_horizontal,
-#     array7=sorted_first_interface
-# )
+# # # === Save .npz files ===
+np.savez(path1, array1=filtered_interior_x, del_h = del_h, nx = nx, ny = ny)
+np.savez(
+    path2,
+    array1=sorted_ghost_nodes,
+    array2=sorted_first_interface,
+    # array3=interpolation_points,
+    array4=mirror_array,
+    array5=unique_rounded_points,
+    array6=rounded_horizontal,
+    array7=sorted_first_interface,
+    array8=second_interface,
+    array9=first_interface
+)
 
 print("✅ Geometry data saved successfully!")
 # print(sorted_ghost_nodes)
