@@ -18,12 +18,13 @@ output_dir = r"D:/numerical computation/Results/FAH4001"
 
 os.makedirs(output_dir, exist_ok=True)
 
-# This verison uses 4 layers : Boundary layer/ghost_nodes      
+# This verison uses 4 layers : zeroth_interface Boundary layer/ghost_nodes      
 #                            : first_interface
 #                            : second_interface
 #                            : third_interface 
 #                            : fourth_interface
-# Finite difference formulations used => 1st order accurate + 2nd order accurate + 4th order accurate
+# Finite difference formulations used =>
+#                    1st order accurate + 2nd order accurate + 3rd order accurate (Convection) + 4th order accurate (Diffusion)
 
 #=======================================================================================================================================#
 #                                                                VERSION CHECK BLOCK
@@ -153,7 +154,7 @@ cn = nx = int(mesh_data["nx"])  #201
 rn = ny = int(mesh_data["ny"]) 
 print(del_h,nx,ny)
 
-mat = np.full((nx, ny), np.nan, dtype=object)       # mesh for the solver
+# mat = np.full((nx, ny), np.nan, dtype=object)       # mesh for the solver
 
 # numeric 2D mesh
 
@@ -164,8 +165,6 @@ v_mat = np.full((rn, cn), np.nan)   # v_velocity
 p_mat = np.full((rn, cn), np.nan)   # pressure
 
 
-print(mat)
-
 variable_array = []                                 # variable marker mesh (in use for pressure)
 for i in range (0,len(inside_pt),1):
     r,c = cord_transfer_logic(i)
@@ -173,8 +172,6 @@ for i in range (0,len(inside_pt),1):
     variable_array.append(x)
 # print("🐒: ",len(variable_array),variable_array)
 
-
-variable_array_copy = variable_array.copy()         # all the pressure BC editing is done on it. Make ghost_node value == first_interface
 
 # Appending all the initial conditions to respective mesh nodes u, v and p (for fluid nodes)
 for i in range(0,len(inside_pt),1):
@@ -501,43 +498,36 @@ for t in range(start, total_time_steps, 1):
         u = u_old[ip][jp]
         v = v_old[ip][jp]
 
-        # u * ∂u/∂x term with 4th order upwinding
+        # -------------------- Convection terms (3rd-order upwind) -------------------- #
+        # u * ∂u/∂x
         if u >= 0:
-            # Backward difference (4th order) for u >= 0
-            u_du_dx = u * (3*u_old[ip][jp-4] - 16*u_old[ip][jp-3] + 36*u_old[ip][jp-2] - 48*u_old[ip][jp-1] + 25*u_old[ip][jp]) / (12*del_h)
+            u_du_dx = u * (11*u_old[ip][jp] - 18*u_old[ip][jp-1] + 9*u_old[ip][jp-2] - 2*u_old[ip][jp-3]) / (6*del_h)
         else:
-            # Forward difference (4th order) for u < 0
-            u_du_dx = u * (-25*u_old[ip][jp] + 48*u_old[ip][jp+1] - 36*u_old[ip][jp+2] + 16*u_old[ip][jp+3] - 3*u_old[ip][jp+4]) / (12*del_h)
+            u_du_dx = u * (-11*u_old[ip][jp] + 18*u_old[ip][jp+1] - 9*u_old[ip][jp+2] + 2*u_old[ip][jp+3]) / (6*del_h)
 
-        # v * ∂u/∂y term with 4th order upwinding
+        # v * ∂u/∂y
         if v >= 0:
-            # Backward difference (4th order) for v >= 0
-            v_du_dy = v * (3*u_old[ip-4][jp] - 16*u_old[ip-3][jp] + 36*u_old[ip-2][jp] - 48*u_old[ip-1][jp] + 25*u_old[ip][jp]) / (12*del_h)
+            v_du_dy = v * (11*u_old[ip][jp] - 18*u_old[ip-1][jp] + 9*u_old[ip-2][jp] - 2*u_old[ip-3][jp]) / (6*del_h)
         else:
-            # Forward difference (4th order) for v < 0
-            v_du_dy = v * (-25*u_old[ip][jp] + 48*u_old[ip+1][jp] - 36*u_old[ip+2][jp] + 16*u_old[ip+3][jp] - 3*u_old[ip+4][jp]) / (12*del_h)
+            v_du_dy = v * (-11*u_old[ip][jp] + 18*u_old[ip+1][jp] - 9*u_old[ip+2][jp] + 2*u_old[ip+3][jp]) / (6*del_h)
 
         Hu_conv = u_du_dx + v_du_dy
 
-        # For v convection term (Hv_conv) with 4th order upwinding
-        # u * ∂v/∂x term
+        # -------------------- v-momentum convection -------------------- #
+        # u * ∂v/∂x
         if u >= 0:
-            # Backward difference (4th order) for u >= 0
-            u_dv_dx = u * (3*v_old[ip][jp-4] - 16*v_old[ip][jp-3] + 36*v_old[ip][jp-2] - 48*v_old[ip][jp-1] + 25*v_old[ip][jp]) / (12*del_h)
+            u_dv_dx = u * (11*v_old[ip][jp] - 18*v_old[ip][jp-1] + 9*v_old[ip][jp-2] - 2*v_old[ip][jp-3]) / (6*del_h)
         else:
-            # Forward difference (4th order) for u < 0
-            u_dv_dx = u * (-25*v_old[ip][jp] + 48*v_old[ip][jp+1] - 36*v_old[ip][jp+2] + 16*v_old[ip][jp+3] - 3*v_old[ip][jp+4]) / (12*del_h)
+            u_dv_dx = u * (-11*v_old[ip][jp] + 18*v_old[ip][jp+1] - 9*v_old[ip][jp+2] + 2*v_old[ip][jp+3]) / (6*del_h)
 
-        # v * ∂v/∂y term
+        # v * ∂v/∂y
         if v >= 0:
-            # Backward difference (4th order) for v >= 0
-            v_dv_dy = v * (3*v_old[ip-4][jp] - 16*v_old[ip-3][jp] + 36*v_old[ip-2][jp] - 48*v_old[ip-1][jp] + 25*v_old[ip][jp]) / (12*del_h)
+            v_dv_dy = v * (11*v_old[ip][jp] - 18*v_old[ip-1][jp] + 9*v_old[ip-2][jp] - 2*v_old[ip-3][jp]) / (6*del_h)
         else:
-            # Forward difference (4th order) for v < 0
-            v_dv_dy = v * (-25*v_old[ip][jp] + 48*v_old[ip+1][jp] - 36*v_old[ip+2][jp] + 16*v_old[ip+3][jp] - 3*v_old[ip+4][jp]) / (12*del_h)
+            v_dv_dy = v * (-11*v_old[ip][jp] + 18*v_old[ip+1][jp] - 9*v_old[ip+2][jp] + 2*v_old[ip+3][jp]) / (6*del_h)
 
         Hv_conv = u_dv_dx + v_dv_dy
-        
+
         #-----------------------------------------------Diffusive flux (Fourth order central difference)-------------------------------------------------------------------------------------------------------------------#
         Hu_diffusion = (1.0/Re) * ((-u_old[ip][jp+2] + 16*u_old[ip][jp+1] - 30*u_old[ip][jp] + 16*u_old[ip][jp-1] - u_old[ip][jp-2]) + (-u_old[ip+2][jp] + 16*u_old[ip+1][jp] - 30*u_old[ip][jp] + 16*u_old[ip-1][jp] - u_old[ip-2][jp])) / (12 * del_h**2)
         
@@ -967,15 +957,13 @@ for t in range(start, total_time_steps, 1):
             v_dv_dy = v * (v_old[ib+1][jb] - v_old[ib][jb]) / del_h
 
         Hv_conv = u_dv_dx + v_dv_dy
-        # print("?/>",queta_c," ",qveta_c)
+       
         #-----------------------------------------------Diffusive flux (Second order central difference)-------------------------------------------------------------------------------------------------------------------#
         Hu_diffusion = (1/Re)*((u_old[ib][jb+1] + u_old[ib][jb-1] + u_old[ib+1][jb] + u_old[ib-1][jb] - 4*u_old[ib][jb])/(del_h**2))  
         Hv_diffusion = (1/Re)*((v_old[ib][jb+1] + v_old[ib][jb-1] + v_old[ib+1][jb] + v_old[ib-1][jb] - 4*v_old[ib][jb])/(del_h**2)) 
         #---------------------------------------------------------#
         u_copy[ib][jb] = u_old[ib][jb] + del_t*(-1*Hu_conv + Hu_diffusion - ((p_new[ib][jb+1] - p_new[ib][jb-1])/(2*del_h)))
         v_copy[ib][jb] = v_old[ib][jb] + del_t*(-1*Hv_conv + Hv_diffusion - ((p_new[ib+1][jb] - p_new[ib-1][jb])/(2*del_h)))
-        # if (jb==15 and t==179):
-        #     v_check.append(u_copy[ib][jb])
 
     for i in range(0,len(second_interface),1):
         ib,jb = cord_transfer_logic_l2(i)
@@ -1032,41 +1020,35 @@ for t in range(start, total_time_steps, 1):
         ib, jb = cord_transfer_logic_l3(i)
         u = u_old[ib][jb]
         v = v_old[ib][jb]
-
-        # u * ∂u/∂x term with 4th order upwinding
+        
+        # -------------------- Convection terms (3rd-order upwind) -------------------- #
+        # u * ∂u/∂x
         if u >= 0:
-            # Backward difference (4th order) for u >= 0
-            u_du_dx = u * (3*u_old[ib][jb-4] - 16*u_old[ib][jb-3] + 36*u_old[ib][jb-2] - 48*u_old[ib][jb-1] + 25*u_old[ib][jb]) / (12*del_h)
+            u_du_dx = u * (11*u_old[ip][jp] - 18*u_old[ip][jp-1] + 9*u_old[ip][jp-2] - 2*u_old[ip][jp-3]) / (6*del_h)
         else:
-            # Forward difference (4th order) for u < 0
-            u_du_dx = u * (-25*u_old[ib][jb] + 48*u_old[ib][jb+1] - 36*u_old[ib][jb+2] + 16*u_old[ib][jb+3] - 3*u_old[ib][jb+4]) / (12*del_h)
+            u_du_dx = u * (-11*u_old[ip][jp] + 18*u_old[ip][jp+1] - 9*u_old[ip][jp+2] + 2*u_old[ip][jp+3]) / (6*del_h)
 
-        # v * ∂u/∂y term with 4th order upwinding
+        # v * ∂u/∂y
         if v >= 0:
-            # Backward difference (4th order) for v >= 0
-            v_du_dy = v * (3*u_old[ib-4][jb] - 16*u_old[ib-3][jb] + 36*u_old[ib-2][jb] - 48*u_old[ib-1][jb] + 25*u_old[ib][jb]) / (12*del_h)
+            v_du_dy = v * (11*u_old[ip][jp] - 18*u_old[ip-1][jp] + 9*u_old[ip-2][jp] - 2*u_old[ip-3][jp]) / (6*del_h)
         else:
-            # Forward difference (4th order) for v < 0
-            v_du_dy = v * (-25*u_old[ib][jb] + 48*u_old[ib+1][jb] - 36*u_old[ib+2][jb] + 16*u_old[ib+3][jb] - 3*u_old[ib+4][jb]) / (12*del_h)
+            v_du_dy = v * (-11*u_old[ip][jp] + 18*u_old[ip+1][jp] - 9*u_old[ip+2][jp] + 2*u_old[ip+3][jp]) / (6*del_h)
 
         Hu_conv = u_du_dx + v_du_dy
 
-        # For v convection term (Hv_conv) with 4th order upwinding
-        # u * ∂v/∂x term
-        if u >= 0:
-            # Backward difference (4th order) for u >= 0
-            u_dv_dx = u * (3*v_old[ib][jb-4] - 16*v_old[ib][jb-3] + 36*v_old[ib][jb-2] - 48*v_old[ib][jb-1] + 25*v_old[ib][jb]) / (12*del_h)
-        else:
-            # Forward difference (4th order) for u < 0
-            u_dv_dx = u * (-25*v_old[ib][jb] + 48*v_old[ib][jb+1] - 36*v_old[ib][jb+2] + 16*v_old[ib][jb+3] - 3*v_old[ib][jb+4]) / (12*del_h)
+        # -------------------- v-momentum convection -------------------- #
 
-        # v * ∂v/∂y term
-        if v >= 0:
-            # Backward difference (4th order) for v >= 0
-            v_dv_dy = v * (3*v_old[ib-4][jb] - 16*v_old[ib-3][jb] + 36*v_old[ib-2][jb] - 48*v_old[ib-1][jb] + 25*v_old[ib][jb]) / (12*del_h)
+        # u * ∂v/∂x
+        if u >= 0:
+            u_dv_dx = u * (11*v_old[ip][jp] - 18*v_old[ip][jp-1] + 9*v_old[ip][jp-2] - 2*v_old[ip][jp-3]) / (6*del_h)
         else:
-            # Forward difference (4th order) for v < 0
-            v_dv_dy = v * (-25*v_old[ib][jb] + 48*v_old[ib+1][jb] - 36*v_old[ib+2][jb] + 16*v_old[ib+3][jb] - 3*v_old[ib+4][jb]) / (12*del_h)
+            u_dv_dx = u * (-11*v_old[ip][jp] + 18*v_old[ip][jp+1] - 9*v_old[ip][jp+2] + 2*v_old[ip][jp+3]) / (6*del_h)
+
+        # v * ∂v/∂y
+        if v >= 0:
+            v_dv_dy = v * (11*v_old[ip][jp] - 18*v_old[ip-1][jp] + 9*v_old[ip-2][jp] - 2*v_old[ip-3][jp]) / (6*del_h)
+        else:
+            v_dv_dy = v * (-11*v_old[ip][jp] + 18*v_old[ip+1][jp] - 9*v_old[ip+2][jp] + 2*v_old[ip+3][jp]) / (6*del_h)
 
         Hv_conv = u_dv_dx + v_dv_dy
 
@@ -1093,6 +1075,7 @@ for t in range(start, total_time_steps, 1):
         #-----------------------------------------------------------Final update-------------------------------------------------------------------------------------------------------------------#
         u_copy[ib][jb] = u_old[ib][jb] + del_t*(-Hu_conv + Hu_diffusion - dp_dx)
         v_copy[ib][jb] = v_old[ib][jb] + del_t*(-Hv_conv + Hv_diffusion - dp_dy)
+
 
     for i in range(0,len(sorted_first_interface),1):
         for j in range(0,len(sorted_first_interface[i]),1):
@@ -1173,8 +1156,6 @@ for t in range(start, total_time_steps, 1):
         np.savez(p_path, p=p_clean)
 
         print(f"✅ Saved timestep {t}")
-
-
 
     print("===================================================================================================")
     # time.sleep(900)
